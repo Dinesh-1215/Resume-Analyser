@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Resume Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../static/css/style.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="mb-3">Flask Resume Analyzer</h1>
+
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('analyze') }}">
+        <div class="row">
+          <div class="col-md-6">
+            <h5>Resume</h5>
+            <ul class="nav nav-tabs" id="resumeTab" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="resume-upload-tab" data-bs-toggle="tab" data-bs-target="#resume-upload" type="button" role="tab" aria-controls="resume-upload" aria-selected="true">Upload</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="resume-paste-tab" data-bs-toggle="tab" data-bs-target="#resume-paste" type="button" role="tab" aria-controls="resume-paste" aria-selected="false">Paste</button>
+              </li>
+            </ul>
+            <div class="tab-content">
+              <div class="tab-pane fade show active" id="resume-upload" role="tabpanel" aria-labelledby="resume-upload-tab">
+                <div class="mb-3 mt-3">
+                  <input class="form-control" type="file" name="resume_file" accept=".pdf,.docx,.txt">
+                  <div class="form-text">Upload a PDF, DOCX, or TXT resume. File is processed and deleted immediately.</div>
+                </div>
+              </div>
+              <div class="tab-pane fade" id="resume-paste" role="tabpanel" aria-labelledby="resume-paste-tab">
+                <div class="mb-3 mt-3">
+                  <textarea class="form-control" name="resume_text" placeholder="Paste your resume text here..."></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <h5>Job Description</h5>
+            <ul class="nav nav-tabs" id="jdTab" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="paste-tab" data-bs-toggle="tab" data-bs-target="#paste" type="button" role="tab" aria-controls="paste" aria-selected="true">Paste JD</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="url-tab" data-bs-toggle="tab" data-bs-target="#url" type="button" role="tab" aria-controls="url" aria-selected="false">JD URL</button>
+              </li>
+            </ul>
+            <div class="tab-content">
+              <div class="tab-pane fade show active" id="paste" role="tabpanel" aria-labelledby="paste-tab">
+                <div class="mb-3 mt-3">
+                  <textarea class="form-control" name="jd_text" placeholder="Paste the job description here..."></textarea>
+                </div>
+              </div>
+              <div class="tab-pane fade" id="url" role="tabpanel" aria-labelledby="url-tab">
+                <div class="mb-3 mt-3">
+                  <input class="form-control" name="jd_url" placeholder="https://example.com/job-posting">
+                  <div class="form-text">Provide a public URL to the job posting. If both are filled, pasted JD is prioritized.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-check my-3">
+          <input type="checkbox" class="form-check-input" name="use_embeddings" checked>
+          <label class="form-check-label">Use embeddings if available</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Analyze</button>
+      </form>
+
+      {% if error %}
+        <div class="alert alert-danger mt-3">{{ error }}</div>
+      {% endif %}
+
+      {% if result %}
+        <div class="card mt-4">
+          <div class="card-header text-white {% if result.ats_percent >= 80 %}bg-success{% elif result.ats_percent >= 50 %}bg-warning{% else %}bg-danger{% endif %}">
+            <h4 class="mb-0">ATS Score: <strong>{{ result.ats_percent }}%</strong></h4>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <h6>Keyword Match</h6>
+                <p class="h4 mb-0">{{ result.keyword_score }}%</p>
+              </div>
+              <div class="col-md-4">
+                <h6>Semantic Match</h6>
+                <p class="h4 mb-0">{{ result.semantic_score }}%</p>
+              </div>
+              <div class="col-md-4">
+                <h6>Method</h6>
+                <p class="h6 mb-0">{{ result.semantic_method if result.semantic_method is defined else 'N/A' }}</p>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <h6>Matched Keywords</h6>
+              <div>
+                {% if result.present_keywords %}
+                  {% for k in result.present_keywords[:40] %}
+                    <span class="badge bg-success me-1 mb-1">{{ k }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">None</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <h6>Missing Keywords (from JD)</h6>
+              <div>
+                {% if result.missing_keywords %}
+                  {% for k in result.missing_keywords[:80] %}
+                    <span class="badge bg-secondary me-1 mb-1">{{ k }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-success">Good coverage!</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <h6>Top JD Keywords</h6>
+              <div>
+                {% for k in result.keywords[:80] %}
+                  <span class="badge bg-info text-dark me-1 mb-1">{{ k }}</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            <h6>Suggestions</h6>
+            <div id="suggestions-area" class="bg-light p-3 rounded">
+              {% for line in suggestions.split('\n') if suggestions %}
+                <div class="suggestion-line">{{ line }}</div>
+              {% endfor %}
+              {% if not suggestions %}
+                <div class="text-muted">No suggestions yet. Click Analyze to generate.</div>
+              {% endif %}
+            </div>
+
+            <div class="mt-2">
+              <button id="regenerate-btn" class="btn btn-sm btn-outline-primary">Regenerate Suggestions</button>
+              <button id="edit-btn" class="btn btn-sm btn-outline-secondary">Edit</button>
+              <button id="copy-btn" class="btn btn-sm btn-outline-success">Copy</button>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Utility: POST JSON and return parsed JSON
+async function postJSON(url, data) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return resp.json();
+}
+
+// Helper to render suggestions array (lines) into the suggestions-area as a UL
+function renderSuggestions(lines) {
+  const area = document.getElementById('suggestions-area');
+  if (!area) return; // safety
+  area.innerHTML = '';
+  if (!lines || lines.length === 0) {
+    const mute = document.createElement('div');
+    mute.className = 'text-muted';
+    mute.innerText = 'No suggestions yet. Click Analyze or Regenerate to generate.';
+    area.appendChild(mute);
+    return;
+  }
+
+  const ul = document.createElement('ul');
+  ul.className = 'list-group';
+  lines.forEach((line, idx) => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-start';
+    const span = document.createElement('span');
+    span.className = 'ms-2 me-auto';
+    span.innerText = line;
+    span.setAttribute('data-line-index', idx);
+    li.appendChild(span);
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'btn-group btn-group-sm';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-outline-secondary';
+    editBtn.type = 'button';
+    editBtn.innerText = 'Edit';
+    editBtn.addEventListener('click', () => {
+      if (span.isContentEditable) {
+        span.contentEditable = 'false';
+        editBtn.innerText = 'Edit';
+      } else {
+        span.contentEditable = 'true';
+        span.focus();
+        editBtn.innerText = 'Done';
+      }
+    });
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn btn-outline-success';
+    copyBtn.type = 'button';
+    copyBtn.innerText = 'Copy';
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(span.innerText);
+        const prev = copyBtn.innerText;
+        copyBtn.innerText = 'Copied!';
+        setTimeout(() => copyBtn.innerText = prev, 1400);
+      } catch (e) {
+        console.error('copy failed', e);
+      }
+    });
+
+    btnGroup.appendChild(editBtn);
+    btnGroup.appendChild(copyBtn);
+    li.appendChild(btnGroup);
+    ul.appendChild(li);
+  });
+  area.appendChild(ul);
+}
+
+// Utility: get current suggestions lines from DOM
+function getCurrentSuggestionLines() {
+  const area = document.getElementById('suggestions-area');
+  if (!area) return [];
+  const spans = area.querySelectorAll('span[data-line-index]');
+  if (!spans || spans.length === 0) return [];
+  return Array.from(spans).map(s => s.innerText.trim()).filter(Boolean);
+}
+
+// Safe attach helper
+function safeAttach(id, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', handler);
+}
+
+// Regenerate handler
+safeAttach('regenerate-btn', async function () {
+  const btn = document.getElementById('regenerate-btn');
+  if (!btn) return;
+  btn.disabled = true;
+  const oldText = btn.innerText;
+  btn.innerText = 'Generating...';
+
+  const resumeEl = document.querySelector('textarea[name="resume_text"]');
+  const jdTextEl = document.querySelector('textarea[name="jd_text"]');
+  const jdUrlEl = document.querySelector('input[name="jd_url"]');
+  const useEmbEl = document.querySelector('input[name="use_embeddings"]');
+
+  const resume_text = resumeEl ? resumeEl.value : '';
+  const jd_text = jdTextEl ? jdTextEl.value : '';
+  const jd_url = jdUrlEl ? jdUrlEl.value : '';
+  const use_embeddings = useEmbEl ? useEmbEl.checked : false;
+
+  try {
+    const payload = { resume_text, jd_text, jd_url, use_embeddings };
+    const result = await postJSON('/suggest', payload);
+    if (result.error) {
+      renderSuggestions([`Error: ${result.error}`]);
+    } else {
+      const lines = (result.suggestions || '').split('\n').map(l => l.trim()).filter(Boolean);
+      renderSuggestions(lines);
+    }
+  } catch (err) {
+    console.error(err);
+    renderSuggestions([`Failed to generate suggestions: ${err}`]);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = oldText;
+  }
+});
+
+// Global Edit/Copy buttons operate on the entire suggestions list
+safeAttach('edit-btn', function () {
+  const area = document.getElementById('suggestions-area');
+  if (!area) return;
+  const editing = area.getAttribute('data-editing') === 'true';
+  if (editing) {
+    area.setAttribute('data-editing', 'false');
+    area.style.border = 'none';
+    const btn = document.getElementById('edit-btn'); if (btn) btn.innerText = 'Edit';
+    area.querySelectorAll('span[data-line-index]').forEach(s => s.contentEditable = 'false');
+  } else {
+    area.setAttribute('data-editing', 'true');
+    area.style.border = '1px dashed #aaa';
+    const btn = document.getElementById('edit-btn'); if (btn) btn.innerText = 'Done';
+    area.querySelectorAll('span[data-line-index]').forEach(s => s.contentEditable = 'true');
+  }
+});
+
+safeAttach('copy-btn', async function () {
+  const lines = getCurrentSuggestionLines();
+  if (!lines || lines.length === 0) return;
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copy-btn'); if (btn) btn.innerText = 'Copied!';
+    setTimeout(() => { const b = document.getElementById('copy-btn'); if (b) b.innerText = 'Copy'; }, 1400);
+  } catch (e) {
+    console.error('copy failed', e);
+  }
+});
+
+// On page load, render server-side suggestions if present
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const rawSuggestions = `{{ suggestions | default('') | replace("\n", '\\n') }}`;
+    const lines = rawSuggestions.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length) renderSuggestions(lines);
+  } catch (e) {
+    console.debug('No initial suggestions to render');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+Flask==2.3.2
+requests==2.31.0
+python-dotenv==1.0.0
+pdfplumber==0.9.0
+python-docx==0.8.11
+scikit-learn==1.3.2
+numpy==1.27.4
+google-genai==0.11.0  # optional: remove if you don't use Gemini/GenAI
+beautifulsoup4==4.12.2  # optional: if you switch to BS4 parsing for JD URLs

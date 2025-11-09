@@ -1,0 +1,5 @@
+body{padding:2rem;}
+      .tab-pane{margin-top:1rem;}
+      textarea{min-height:140px;}
+      .col-split { display: flex; gap: 1rem; }
+      .col-left, .col-right { flex: 1; }
